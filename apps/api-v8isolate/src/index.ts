@@ -38,9 +38,9 @@ function time<T>(fn: () => T): { result: T; ms: number } {
 
 app.get("/", (c) => {
   const fib    = time(() => fibonacci(40));
-  const primes = time(() => sievePrimes(50_000));
-  const sort   = time(() => sortArray(10_000));
-  const str    = time(() => stringOps(2_000));
+  const primes = time(() => sievePrimes(200_000));
+  const sort   = time(() => sortArray(50_000));
+  const str    = time(() => stringOps(5_000));
 
   const totalMs = Math.round((fib.ms + primes.ms + sort.ms + str.ms) * 100) / 100;
 
@@ -60,17 +60,17 @@ app.get("/", (c) => {
         duration_ms: fib.ms,
       },
       primes_sieve: {
-        limit: 50_000,
+        limit: 200_000,
         count: primes.result,
         duration_ms: primes.ms,
       },
       array_sort: {
-        size: 10_000,
+        size: 50_000,
         ...sort.result,
         duration_ms: sort.ms,
       },
       string_ops: {
-        iterations: 2_000,
+        iterations: 5_000,
         output_length: str.result,
         duration_ms: str.ms,
       },
