@@ -6,12 +6,5 @@
   "compatibility_date": "2026-04-16",
   "compatibility_flags": [
     "nodejs_compat"
-  ],
-    "vars": {
-    "DEPLOYMENT": "cloudflare",
-    "CLOUDINARY_CLOUD_NAME": "dn8cktife",
-    "FRONTEND_URL":"https://jirokit.com",
-    "ALLOWED_ORIGINS":"https://jirokit.com,http://localhost:3000",
-    "JWT_SECRET":"dev-only-change-me-in-production"
-  },
+  ]
 }
