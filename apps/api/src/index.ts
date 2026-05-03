@@ -30,7 +30,7 @@ api.route("/events", eventsApp);
 api.route("/promo", promoApp);
 api.route("/benchmark", benchmarkApp);
 
-app.get("/", (c) => c.text("jirokit api"));
+app.get("/", (c) => c.text("silahkan akses https://jitsi-v8.anla.works/api/benchmark"));
 app.route("/api", api);
 
 export default app;
