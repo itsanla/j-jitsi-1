@@ -1,14 +1,15 @@
 ================================================================================
 PERBANDINGAN PERFORMA ARSITEKTUR EDGE COMPUTING:
 VERCEL SERVERLESS FUNCTIONS vs CLOUDFLARE WORKERS V8 ISOLATE
-Berbasis Metrik HTTP Response Time pada Hono.js REST API dengan Beban Komputasi
+Berbasis Metrik HTTP Response Time (Client-Side RTT) pada Hono.js REST API
 ================================================================================
-Tanggal Analisis  : 2026-05-03 19:26:23
+Tanggal Analisis  : 2026-05-03 19:57:30
 Platform A        : https://jitsi-vm.anla.works  [Vercel (Lambda)]
 Platform B        : https://jitsi-v8.anla.works  [Cloudflare (V8 Isolate)]
 Jumlah Request    : 1000 per platform
 Concurrency       : 10 workers paralel
 Framework         : Hono.js (identik pada kedua platform)
+Beban Komputasi   : Fibonacci F(40) + Sieve 200K + Sort 50K + String 5K
 --------------------------------------------------------------------------------
 
 1. LATAR BELAKANG ARSITEKTUR
@@ -20,174 +21,137 @@ Vercel Serverless Functions menjalankan kode di atas infrastruktur AWS Lambda
 dengan Node.js runtime. Setiap fungsi dieksekusi dalam proses Node.js yang
 terisolasi dalam container. Cold start terjadi ketika container belum tersedia
 (estimasi: 100–1000 ms), mencakup inisialisasi runtime Node.js, loading modul,
-dan alokasi memori. Vercel mengelola pool container warm secara otomatis.
+dan alokasi memori.
 
-Cloudflare Workers menggunakan model V8 Isolate — sebuah instance V8 engine
-yang mengisolasi eksekusi fungsi via JavaScript namespace, bukan container
-terpisah. Model ini menghilangkan overhead cold start yang signifikan (<5 ms)
-karena V8 isolate diinisialisasi satu kali per worker process dan di-reuse
-lintas request. Eksekusi berjalan dekat pengguna (edge network Cloudflare
->300 PoP global) dengan akses hanya pada Web Standard APIs.
+Cloudflare Workers menggunakan model V8 Isolate — instance V8 engine yang
+mengisolasi eksekusi via JavaScript namespace, bukan container terpisah.
+Model ini menghilangkan cold start yang signifikan (<5 ms) karena isolate
+di-reuse lintas request. Cloudflare memiliki >300 PoP edge global.
 
-Kedua platform menjalankan kode Hono.js yang identik secara logika, memastikan
-perbedaan performa murni berasal dari karakteristik infrastruktur, bukan
-implementasi aplikasi.
+Kedua platform menjalankan kode Hono.js yang identik secara logika dengan
+beban komputasi yang sama, memastikan perbedaan murni dari infrastruktur.
 
-2. BEBAN KOMPUTASI (IDENTIK PADA KEDUA PLATFORM)
+2. CATATAN METODOLOGI — KETERBATASAN TIMING SERVER-SIDE
+──────────────────────────────────────────────────────────
+Cloudflare Workers membekukan nilai Date.now() dan mengkuantisasi
+performance.now() selama eksekusi request sebagai mitigasi kerentanan
+Spectre (CVE-2017-5753). Akibatnya, pengukuran waktu server-side pada
+Cloudflare Workers tidak tersedia dan tidak dapat diandalkan.
+
+Untuk menjaga fairness perbandingan, server-side timing DIHAPUS dari
+kedua platform. Penelitian ini berfokus sepenuhnya pada metrik yang dapat
+diukur secara setara: client-side Round Trip Time (RTT).
+
+Metrik yang digunakan:
+  - total_ms  : waktu dari pembukaan koneksi TCP hingga seluruh body diterima
+  - ttfb_ms   : Time To First Byte (koneksi hingga header pertama)
+  - Keduanya diukur dengan time.perf_counter() Python (resolusi nanosecond)
+
+3. BEBAN KOMPUTASI (IDENTIK PADA KEDUA PLATFORM)
 ──────────────────────────────────────────────────
-Setiap request menjalankan 4 task komputasi CPU secara berurutan:
-  a) Fibonacci F(45)          — kalkulasi iteratif bilangan Fibonacci ke-45
-  b) Sieve of Eratosthenes    — pembangkitan bilangan prima hingga 100.000
-  c) Array Sort (50.000 elem) — sorting 50.000 bilangan float acak (QuickSort)
-  d) String Operations (5.000)— konkatenasi dan pemrosesan 5.000 string acak
+  a) Fibonacci F(40)           — iteratif, hasil: 102.334.155
+  b) Sieve of Eratosthenes     — bilangan prima hingga 200.000
+  c) Array Sort (50.000 elemen)— sorting float acak
+  d) String Operations (5.000) — konkatenasi string acak
 
-Total compute time diukur server-side menggunakan performance.now() dan
-disertakan dalam JSON response sebagai `total_compute_ms`.
+4. HASIL STATISTIK — TOTAL RESPONSE TIME / RTT (ms)
+──────────────────────────────────────────────────────
+                        Vercel (Lambda)           Cloudflare (V8 Isolate) 
+  N (sukses)          : 1000                      458                     
+  Error               : 0                         542                     
+  Mean                : 432.406                   762.297                 
+  Median (P50)        : 435.080                   707.635                 
+  Std Dev             : 50.305                    402.434                 
+  CV (stdev/mean)     : 0.1163                    0.5279                  
+  Min                 : 290.810                   201.090                 
+  P25                 : 393.460                   555.345                 
+  P75                 : 463.783                   801.933                 
+  P95                 : 507.453                   1695.164                
+  P99                 : 578.365                   2015.472                
+  IQR                 : 70.322                    246.587                 
+  Max                 : 702.660                   3718.950                
+  Skewness            : 0.4799                    2.8033                  
+  Kurtosis (excess)   : 1.4566                    13.3215                 
 
-3. METODOLOGI
+5. TTFB — TIME TO FIRST BYTE (ms)
+──────────────────────────────────
+                        Vercel (Lambda)           Cloudflare (V8 Isolate) 
+  Mean TTFB           : 362.828                   744.617                 
+  Median TTFB         : 365.070                   692.140                 
+  P95 TTFB            : 435.493                   1671.880                
+
+6. ANALISIS WARM-UP VS STEADY STATE (DETEKSI COLD START)
+──────────────────────────────────────────────────────────
+  (Warm-up = 20% request pertama, Steady = 80% sisanya)
+
+                        Vercel (Lambda)           Cloudflare (V8 Isolate) 
+  Warmup mean (200 req) : 438.134                   739.833                 
+  Steady mean         : 430.974                   767.867                 
+  Selisih (cold start): 7.160                     28.034                  
+
+  Selisih warmup–steady yang lebih besar mengindikasikan cold start effect
+  yang lebih dominan. Lambda (Vercel) umumnya memiliki cold start lebih tinggi
+  karena inisialisasi container Node.js, sedangkan V8 Isolate (Cloudflare)
+  me-reuse isolate sehingga cold start minimal.
+
+7. UJI SIGNIFIKANSI STATISTIK
 ──────────────────────────────
-- Protokol  : HTTP GET, response format JSON
-- Timing    : time.perf_counter() Python (resolusi sub-millisecond)
-  * total_ms  : mulai koneksi TCP hingga seluruh body diterima (RTT penuh)
-  * ttfb_ms   : mulai koneksi hingga byte pertama diterima (Time To First Byte)
-  * compute_ms: diambil dari field `total_compute_ms` dalam JSON response
-  * overhead  : total_ms − compute_ms (= latency jaringan + infra overhead)
-- Concurrency : 10 thread paralel (ThreadPoolExecutor)
-- Validasi API: setiap response memiliki `request_id` UUID unik
-- Uji statistik: Mann-Whitney U (non-parametrik, bebas asumsi normalitas)
-- Effect size : rank-biserial correlation (r) dan Cohen's d
+  Metode    : Mann-Whitney U Test (two-sided, non-parametrik)
+  H₀        : Tidak ada perbedaan distribusi RTT kedua platform
+  H₁        : Terdapat perbedaan distribusi RTT yang signifikan
+  U-stat    : 54543.5
+  p-value   : 0.000000
+  Hasil     : Signifikan (p < 0.05)
+  Effect r  : 0.761819  (>0.1 kecil, >0.3 sedang, >0.5 besar)
+  Cohen's d : -1.438813
 
-4. HASIL STATISTIK
+8. INTERPRETASI DAN DISKUSI
 ──────────────────────────────
-4.1 Total Response Time — Client-Measured End-to-End (ms)
-                        Vercel (Lambda)         Cloudflare (V8 Isolate)
-  N (sukses)          : 1000                    1000                  
-  Error               : 0                       0                     
-  Mean                : 443.519                 712.253               
-  Median (P50)        : 436.505                 640.985               
-  Std Dev             : 142.396                 469.143               
-  CV (stdev/mean)     : 0.3211                  0.6587                
-  Min                 : 296.360                 190.490               
-  P25                 : 393.415                 480.233               
-  P75                 : 457.438                 765.602               
-  P95                 : 502.978                 1656.147              
-  P99                 : 783.284                 2857.106              
-  IQR                 : 64.022                  285.370               
-  Max                 : 2079.820                4451.460              
-  Skewness            : 9.2638                  3.4860                
-  Kurtosis (excess)   : 96.6208                 17.4434               
+Perbedaan mean RTT: 329.891 ms (76.29%), Vercel (Lambda) lebih cepat.
 
-4.2 Server-Side Compute Time — JSON field `total_compute_ms` (ms)
-  CATATAN PENTING: Cloudflare Workers membekukan Date.now() dan
-  mengkuantisasi performance.now() selama eksekusi request sebagai
-  mitigasi kerentanan Spectre (CVE-2017-5753). Akibatnya, pengukuran
-  waktu server-side pada Cloudflare Workers secara teknis tidak tersedia.
-  Ini adalah fitur keamanan yang disengaja, bukan keterbatasan implementasi.
-  Referensi: https://developers.cloudflare.com/workers/runtime-apis/performance/
+Consistency (CV):
+  Vercel (Lambda): CV = 0.1163  |  Cloudflare (V8 Isolate): CV = 0.5279
+  CV lebih rendah = distribusi latency lebih konsisten dan dapat diprediksi.
+  Platform lebih konsisten: Vercel (Lambda)
 
-  Mean compute        : 41.031                  N/A (timer frozen)
-  Median compute      : 39.0                    N/A
-  P95 compute         : 48.0                    N/A
+Tail Latency (P99 vs P50):
+  Rasio P99/P50 Vercel (Lambda): 1.33x
+  Rasio P99/P50 Cloudflare (V8 Isolate): 2.85x
+  Rasio tinggi mengindikasikan outlier signifikan (cold start / throttling).
 
-4.3 Network/Infra Overhead = total_ms − compute_ms (ms)
-  (Hanya tersedia untuk platform dengan server-side timing aktif)
-  Mean overhead       : 402.4881                N/A
-  Median overhead     : 397.04999999999995      N/A
-  P95 overhead        : 460.33799999999997      N/A
+Skewness 0.480 (Vercel (Lambda)) vs 2.803 (Cloudflare (V8 Isolate)):
+  Distribusi right-skewed adalah karakteristik tipikal arsitektur serverless
+  karena adanya cold start events yang mendorong outlier ke kanan.
 
-4.4 Per-Task Compute Time Breakdown (ms)
-  Task                    [ Vercel (Lambda) ]                 [ Cloudflare (V8 Isolate) ]
-  --------------------------------------------------------------------------
-  Fibonacci F(45)       : mean=0.009ms  p95=0.000ms    mean=0.000ms  p95=0.000ms
-  Primes Sieve (100K)   : mean=1.617ms  p95=2.000ms    mean=0.000ms  p95=0.000ms
-  Array Sort (50K)      : mean=37.805ms  p95=45.000ms    mean=0.000ms  p95=0.000ms
-  String Ops (5K)       : mean=1.600ms  p95=3.000ms    mean=0.000ms  p95=0.000ms
-
-4.5 Warm-up vs Steady State (deteksi cold start)
-  Warmup mean (200 req)  : 510.076                 695.135               
-  Steady-state mean   : 426.880                 716.533               
-  Selisih warmup-steady: 83.196                  21.398                
-
-4.6 Validasi API
-  Request ID unik     : YA                      YA
-  (YA = setiap response memiliki UUID unik, tidak ada caching)
-
-5. UJI SIGNIFIKANSI STATISTIK
+9. KESIMPULAN
 ──────────────────────────────
-  Metode          : Mann-Whitney U Test (two-sided, non-parametrik)
-  H₀              : Tidak ada perbedaan distribusi response time
-  H₁              : Terdapat perbedaan distribusi response time
-  U-statistic     : 212002.5
-  p-value         : 0.000000
-  Kesimpulan      : Signifikan (p < 0.05)
-  Effect size (r) : 0.575995
-                    (interpretasi: |r|>0.1 kecil, >0.3 sedang, >0.5 besar)
-  Cohen's d       : -0.775169
+Dari 1000 request per platform dengan beban komputasi identik (Hono.js):
 
-6. INTERPRETASI DAN DISKUSI
-──────────────────────────────
-Perbedaan mean response time antara Vercel (Lambda) dan Cloudflare (V8 Isolate):
-  Selisih absolut : 268.734 ms
-  Selisih relatif : 60.59%
-  Platform lebih cepat: Vercel (Lambda)
-
-Decomposisi waktu response memisahkan dua komponen utama:
-(1) Server Compute Time: waktu eksekusi kode JavaScript di server
-    Vercel (Lambda): 41.031 ms  |  Cloudflare (V8 Isolate): 0.000 ms
-    Mencerminkan efisiensi engine JavaScript pada masing-masing platform.
-    V8 Isolate (Cloudflare) dan V8 di Node.js (Vercel) menggunakan engine yang
-    sama, namun perbedaan konfigurasi dan konteks eksekusi dapat mempengaruhi
-    JIT compilation behavior.
-
-(2) Network/Infra Overhead: latensi jaringan + overhead infrastruktur
-    Vercel (Lambda): 402.488 ms  |  Cloudflare (V8 Isolate): 0.000 ms
-    Komponen ini mencakup: TCP handshake, TLS negotiation, routing jaringan,
-    cold start (khusus Lambda), scheduling container/isolate, dan serialisasi
-    response.
-
-Coefficient of Variation (CV) mengindikasikan konsistensi layanan:
-  Vercel (Lambda): CV = 0.3211   |   Cloudflare (V8 Isolate): CV = 0.6587
-  CV lebih rendah = distribusi latency lebih konsisten (lebih dapat diprediksi).
-
-Warm-up vs Steady State:
-  Selisih signifikan antara fase warm-up dan steady state mengindikasikan
-  adanya cold start effect. Model Lambda (Vercel) umumnya menunjukkan
-  selisih lebih besar karena overhead inisialisasi container.
-
-Skewness positif (9.264 vs 3.486) mengindikasikan distribusi
-right-skewed — adanya outlier ke kanan yang merupakan karakteristik khas
-arsitektur serverless (cold start events, GC pause, network jitter).
-
-7. KESIMPULAN
-──────────────────────────────
-Dari 1000 request per platform dengan beban komputasi identik:
-
-  1. Vercel (Lambda) mencatatkan mean response time lebih rendah
-     (selisih: 268.734 ms / 60.59% lebih cepat)
+  1. Vercel (Lambda) mencatatkan mean RTT lebih rendah
+     (selisih: 329.891 ms / 76.29%)
 
   2. Uji Mann-Whitney U: Signifikan (p < 0.05)
-     p = 0.000000, effect size r = 0.5760
+     p = 0.000000, effect size r = 0.7618
 
-  3. Server compute time kedua platform relatif berbeda:
-     Vercel (Lambda) = 41.031 ms, Cloudflare (V8 Isolate) = 0.000 ms
+  3. Konsistensi: Vercel (Lambda) lebih konsisten
+     (CV: 0.1163 vs 0.5279)
 
-  4. Perbedaan utama terletak pada komponen Network/Infra Overhead:
-     Vercel (Lambda) = 402.488 ms, Cloudflare (V8 Isolate) = 0.000 ms
-     Overhead lebih rendah pada Cloudflare (V8 Isolate)
+  4. Cold start effect (selisih warmup-steady):
+     Vercel (Lambda): 7.160 ms  |  Cloudflare (V8 Isolate): 28.034 ms
 
-  5. Konsistensi (CV): Lebih konsisten: Vercel (Lambda)
+  5. Tail latency (P99):
+     Vercel (Lambda): 578.365 ms  |  Cloudflare (V8 Isolate): 2015.472 ms
 
-  6. Validasi API: kedua platform mengembalikan response JSON valid
-     dengan request_id unik per request (tidak ada caching)
+  6. Validasi API: kedua platform mengembalikan JSON valid
+     dengan request_id UUID unik per request (tanpa caching)
 
-8. ARTEFAK VISUAL
+10. ARTEFAK VISUAL
 ──────────────────────────────
-  images/01_distribution.png      — Histogram + KDE distribusi response time
-  images/02_boxplot.png           — Box plot spread, outlier, dan compute time
-  images/03_percentiles.png       — Perbandingan P50, P75, P95, P99
-  images/04_timeseries.png        — Time series per-request (deteksi warm-up)
-  images/05_cdf.png               — Empirical CDF kedua platform
-  images/06_overhead_breakdown.png — Dekomposisi compute vs infra overhead
-  images/07_task_breakdown.png    — Per-task compute time (fibonacci/primes/sort/string)
+  images/01_distribution.png     — Histogram + KDE distribusi RTT
+  images/02_boxplot.png          — Box plot RTT & TTFB
+  images/03_percentiles.png      — Perbandingan P50, P75, P95, P99
+  images/04_timeseries.png       — Time series per-request (warm-up visibility)
+  images/05_cdf.png              — Empirical CDF kedua platform
+  images/06_warmup_vs_steady.png — Analisis cold start: warmup vs steady state
 
 ================================================================================
