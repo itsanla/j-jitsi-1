@@ -46,14 +46,12 @@ app.get("/", (c) => {
       isolation: "v8-isolate-namespace",
     },
     tasks: {
-      fibonacci:    { n: 40,       result: fib,   duration_ms: null },
-      primes_sieve: { limit: 200_000, count: primes, duration_ms: null },
-      array_sort:   { size: 50_000, ...sort,       duration_ms: null },
-      string_ops:   { iterations: 5_000, output_length: str, duration_ms: null },
+      fibonacci:    { n: 40,       result: fib              },
+      primes_sieve: { limit: 200_000, count: primes         },
+      array_sort:   { size: 50_000, ...sort                 },
+      string_ops:   { iterations: 5_000, output_length: str },
     },
-    total_compute_ms: null,
-    timing_note: "Cloudflare Workers freezes Date.now() and quantizes performance.now() during request execution (Spectre mitigation). Server-side timing is intentionally unavailable.",
-    timestamp: new Date().toISOString(),
+    timestamp:  new Date().toISOString(),
     request_id: crypto.randomUUID(),
   });
 });

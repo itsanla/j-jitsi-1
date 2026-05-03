@@ -30,18 +30,11 @@ function stringOps(iterations: number): number {
   return parts.join('').length
 }
 
-function time<T>(fn: () => T): { result: T; ms: number } {
-  const t = Date.now()
-  const result = fn()
-  return { result, ms: Date.now() - t }
-}
-
 export default async function handler(_req: Request): Promise<Response> {
-  const fib    = time(() => fibonacci(40))
-  const primes = time(() => sievePrimes(200_000))
-  const sort   = time(() => sortArray(50_000))
-  const str    = time(() => stringOps(5_000))
-  const totalMs = fib.ms + primes.ms + sort.ms + str.ms
+  const fib    = fibonacci(40)
+  const primes = sievePrimes(200_000)
+  const sort   = sortArray(50_000)
+  const str    = stringOps(5_000)
 
   const body = JSON.stringify({
     platform: {
@@ -53,13 +46,12 @@ export default async function handler(_req: Request): Promise<Response> {
       isolation: 'process-container',
     },
     tasks: {
-      fibonacci: { n: 40, result: fib.result, duration_ms: fib.ms },
-      primes_sieve: { limit: 200_000, count: primes.result, duration_ms: primes.ms },
-      array_sort: { size: 50_000, ...sort.result, duration_ms: sort.ms },
-      string_ops: { iterations: 5_000, output_length: str.result, duration_ms: str.ms },
+      fibonacci:    { n: 40,       result: fib              },
+      primes_sieve: { limit: 200_000, count: primes         },
+      array_sort:   { size: 50_000, ...sort                 },
+      string_ops:   { iterations: 5_000, output_length: str },
     },
-    total_compute_ms: totalMs,
-    timestamp: new Date().toISOString(),
+    timestamp:  new Date().toISOString(),
     request_id: crypto.randomUUID(),
   })
 
