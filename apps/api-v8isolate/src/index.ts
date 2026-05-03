@@ -30,19 +30,11 @@ function stringOps(iterations: number): number {
   return parts.join("").length;
 }
 
-function time<T>(fn: () => T): { result: T; ms: number } {
-  const t = Date.now();
-  const result = fn();
-  return { result, ms: Date.now() - t };
-}
-
 app.get("/", (c) => {
-  const fib    = time(() => fibonacci(40));
-  const primes = time(() => sievePrimes(200_000));
-  const sort   = time(() => sortArray(50_000));
-  const str    = time(() => stringOps(5_000));
-
-  const totalMs = Math.round((fib.ms + primes.ms + sort.ms + str.ms) * 100) / 100;
+  const fib    = fibonacci(40);
+  const primes = sievePrimes(200_000);
+  const sort   = sortArray(50_000);
+  const str    = stringOps(5_000);
 
   return c.json({
     platform: {
@@ -54,28 +46,13 @@ app.get("/", (c) => {
       isolation: "v8-isolate-namespace",
     },
     tasks: {
-      fibonacci: {
-        n: 40,
-        result: fib.result,
-        duration_ms: fib.ms,
-      },
-      primes_sieve: {
-        limit: 200_000,
-        count: primes.result,
-        duration_ms: primes.ms,
-      },
-      array_sort: {
-        size: 50_000,
-        ...sort.result,
-        duration_ms: sort.ms,
-      },
-      string_ops: {
-        iterations: 5_000,
-        output_length: str.result,
-        duration_ms: str.ms,
-      },
+      fibonacci:    { n: 40,       result: fib,   duration_ms: null },
+      primes_sieve: { limit: 200_000, count: primes, duration_ms: null },
+      array_sort:   { size: 50_000, ...sort,       duration_ms: null },
+      string_ops:   { iterations: 5_000, output_length: str, duration_ms: null },
     },
-    total_compute_ms: totalMs,
+    total_compute_ms: null,
+    timing_note: "Cloudflare Workers freezes Date.now() and quantizes performance.now() during request execution (Spectre mitigation). Server-side timing is intentionally unavailable.",
     timestamp: new Date().toISOString(),
     request_id: crypto.randomUUID(),
   });
