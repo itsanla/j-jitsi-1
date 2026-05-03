@@ -41,7 +41,6 @@ app.get('/', (c) => {
   const primes = time(() => sievePrimes(100_000))
   const sort   = time(() => sortArray(50_000))
   const str    = time(() => stringOps(5_000))
-
   const totalMs = Math.round((fib.ms + primes.ms + sort.ms + str.ms) * 100) / 100
 
   return c.json({
@@ -54,26 +53,10 @@ app.get('/', (c) => {
       isolation: 'process-container',
     },
     tasks: {
-      fibonacci: {
-        n: 45,
-        result: fib.result,
-        duration_ms: fib.ms,
-      },
-      primes_sieve: {
-        limit: 100_000,
-        count: primes.result,
-        duration_ms: primes.ms,
-      },
-      array_sort: {
-        size: 50_000,
-        ...sort.result,
-        duration_ms: sort.ms,
-      },
-      string_ops: {
-        iterations: 5_000,
-        output_length: str.result,
-        duration_ms: str.ms,
-      },
+      fibonacci: { n: 45, result: fib.result, duration_ms: fib.ms },
+      primes_sieve: { limit: 100_000, count: primes.result, duration_ms: primes.ms },
+      array_sort: { size: 50_000, ...sort.result, duration_ms: sort.ms },
+      string_ops: { iterations: 5_000, output_length: str.result, duration_ms: str.ms },
     },
     total_compute_ms: totalMs,
     timestamp: new Date().toISOString(),
