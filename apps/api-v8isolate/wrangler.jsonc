@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jitsi-v8",
+  "account_id": "f6d6f56c51d6f47f1f115cd2de97c1f1",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-16",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+    "vars": {
+    "DEPLOYMENT": "cloudflare",
+    "CLOUDINARY_CLOUD_NAME": "dn8cktife",
+    "FRONTEND_URL":"https://jirokit.com",
+    "ALLOWED_ORIGINS":"https://jirokit.com,http://localhost:3000",
+    "JWT_SECRET":"dev-only-change-me-in-production"
+  },
+}

@@ -48,3 +48,6 @@ __pycache__/
 # api node_modules & wrangler state
 apps/api/node_modules/
 apps/api/.wrangler/
+apps/api-v8isolate/node_modules/
+apps/api-v8isolate/.wrangler/
+apps/api-vm/node_modules/
