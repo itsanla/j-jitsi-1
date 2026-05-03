@@ -589,15 +589,22 @@ disertakan dalam JSON response sebagai `total_compute_ms`.
   Kurtosis (excess)   : {ta['kurt']:<22.4f}  {tb['kurt']:<22.4f}
 
 4.2 Server-Side Compute Time — JSON field `total_compute_ms` (ms)
-  Mean compute        : {ca.get('mean',0):<22.3f}  {cb.get('mean',0):<22.3f}
-  Median compute      : {ca.get('median',0):<22.3f}  {cb.get('median',0):<22.3f}
-  P95 compute         : {ca.get('p95',0):<22.3f}  {cb.get('p95',0):<22.3f}
-  Stdev compute       : {ca.get('stdev',0):<22.3f}  {cb.get('stdev',0):<22.3f}
+  CATATAN PENTING: Cloudflare Workers membekukan Date.now() dan
+  mengkuantisasi performance.now() selama eksekusi request sebagai
+  mitigasi kerentanan Spectre (CVE-2017-5753). Akibatnya, pengukuran
+  waktu server-side pada Cloudflare Workers secara teknis tidak tersedia.
+  Ini adalah fitur keamanan yang disengaja, bukan keterbatasan implementasi.
+  Referensi: https://developers.cloudflare.com/workers/runtime-apis/performance/
+
+  Mean compute        : {ca.get('mean',0) if ca else 'N/A (timer frozen)':<22}  {cb.get('mean',0) if cb else 'N/A (timer frozen)'}
+  Median compute      : {(ca.get('median',0) if ca else 'N/A'):<22}  {(cb.get('median',0) if cb else 'N/A')}
+  P95 compute         : {(ca.get('p95',0) if ca else 'N/A'):<22}  {(cb.get('p95',0) if cb else 'N/A')}
 
 4.3 Network/Infra Overhead = total_ms − compute_ms (ms)
-  Mean overhead       : {oa.get('mean',0):<22.3f}  {ob.get('mean',0):<22.3f}
-  Median overhead     : {oa.get('median',0):<22.3f}  {ob.get('median',0):<22.3f}
-  P95 overhead        : {oa.get('p95',0):<22.3f}  {ob.get('p95',0):<22.3f}
+  (Hanya tersedia untuk platform dengan server-side timing aktif)
+  Mean overhead       : {oa.get('mean',0) if oa else 'N/A':<22}  {ob.get('mean',0) if ob else 'N/A'}
+  Median overhead     : {(oa.get('median',0) if oa else 'N/A'):<22}  {(ob.get('median',0) if ob else 'N/A')}
+  P95 overhead        : {(oa.get('p95',0) if oa else 'N/A'):<22}  {(ob.get('p95',0) if ob else 'N/A')}
 
 4.4 Per-Task Compute Time Breakdown (ms)
 {task_block}
@@ -772,9 +779,11 @@ def main():
             r    = requests.get(url, timeout=10)
             data = r.json()
             plat = data.get("platform", {}).get("deployment", "?")
-            comp = data.get("total_compute_ms", "?")
+            comp = data.get("total_compute_ms")
+            comp_str = f"{comp}ms" if comp is not None else "N/A (timer frozen)"
+            note = " [dim][Spectre mitigation][/]" if data.get("timing_note") else ""
             console.print(f"  [green]✓[/] {label}  HTTP {r.status_code}  "
-                          f"deployment={plat}  compute={comp}ms")
+                          f"deployment={plat}  compute={comp_str}{note}")
         except Exception as e:
             console.print(f"  [red]✗[/] {label} — {e}")
     console.print()
