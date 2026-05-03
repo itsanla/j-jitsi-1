@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-16",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+    "vars": {
+    "DEPLOYMENT": "cloudflare",
+    "CLOUDINARY_CLOUD_NAME": "dn8cktife",
+    "FRONTEND_URL":"https://jirokit.com",
+    "ALLOWED_ORIGINS":"https://jirokit.com,http://localhost:3000",
+    "JWT_SECRET":"dev-only-change-me-in-production"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sekolah",
+      "database_id": "4f67f163-452a-4a19-aa37-0982b34b2e06",
+      "migrations_dir": "drizzle"
+    }
+  ],
+}

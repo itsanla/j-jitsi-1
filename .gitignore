@@ -44,3 +44,7 @@ next-env.d.ts
 .venv/
 __pycache__/
 *.pyc
+
+# api node_modules & wrangler state
+apps/api/node_modules/
+apps/api/.wrangler/
