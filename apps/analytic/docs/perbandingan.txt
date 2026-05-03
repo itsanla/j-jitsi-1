@@ -1,0 +1,131 @@
+================================================================================
+PERBANDINGAN PERFORMA ARSITEKTUR SERVERLESS:
+VERCEL SERVERLESS FUNCTIONS vs CLOUDFLARE PAGES EDGE WORKERS
+Berbasis Metrik HTTP Response Time pada Server-Side Rendering (Next.js)
+================================================================================
+Tanggal Analisis : 2026-05-03 16:39:25
+Server A (proxy)  : http://localhost:3000  [Server-3000]
+Server B (proxy)  : http://localhost:4000  [Server-4000]
+Jumlah Request    : 50 per server
+Concurrency       : 5 workers paralel
+Runtime           : Next.js App Router, Edge Runtime, force-dynamic
+--------------------------------------------------------------------------------
+
+1. LATAR BELAKANG ARSITEKTUR
+──────────────────────────────
+Vercel Serverless Functions menjalankan kode di atas container AWS Lambda
+berbasis Node.js runtime. Setiap invokasi dapat mengalami cold start
+(inisialisasi container ~100–1000 ms) sebelum eksekusi fungsi berlangsung.
+Vercel mengelola warm instance secara otomatis namun tidak dijamin.
+
+Cloudflare Pages (Workers) menggunakan model V8 Isolate — proses V8 tunggal
+yang mengisolasi fungsi via namespace, bukan proses/container terpisah.
+Model ini menghilangkan overhead cold start yang signifikan (<5 ms) karena
+isolate diinisialisasi sekali dan di-reuse. Namun, API yang tersedia dibatasi
+pada Web Standard APIs (tanpa Node.js built-ins seperti fs, crypto).
+
+Kedua platform mendukung distribusi geografis (CDN + edge node global),
+namun Cloudflare memiliki lebih dari 300 PoP dibandingkan Vercel yang
+bergantung pada wilayah AWS.
+
+2. METODOLOGI
+──────────────────────────────
+- Protokol  : HTTP/1.1 GET dengan query parameter ?req_id=<uuid> unik per request
+- Cache bypass: req_id acak memaksa server tidak meng-cache response
+- SSR validation: setiap response diperiksa apakah Render Timestamp unik
+- Timing client : time.perf_counter() (resolusi nanosecond)
+  * total_ms : mulai koneksi hingga seluruh body diterima
+  * ttfb_ms  : mulai koneksi hingga header pertama diterima
+- Compute time (server-side): diekstrak dari HTML yang di-render
+  (fungsi sort 10.000 angka acak, diukur dengan Date.now())
+- Concurrency : 5 request paralel (ThreadPoolExecutor)
+- Uji statistik : Mann-Whitney U (non-parametrik, tidak mengasumsikan normalitas)
+- Effect size  : rank-biserial correlation (r) dan Cohen's d
+
+3. HASIL STATISTIK
+──────────────────────────────
+3.1 Total Response Time (ms)
+                        Server-3000           Server-4000         
+  N (sukses)          : 50                    50                  
+  Error               : 0                     0                   
+  Mean                : 46.70                 95.56               
+  Median (P50)        : 47.39                 93.61               
+  Std Dev             : 6.14                  16.21               
+  CV (stdev/mean)     : 0.131                 0.170               
+  Min                 : 26.28                 34.16               
+  P25                 : 43.11                 90.02               
+  P75                 : 50.26                 104.94              
+  P95                 : 54.90                 125.24              
+  P99                 : 60.32                 132.06              
+  IQR                 : 7.15                  14.92               
+  Skewness            : -0.624                -0.615              
+  Kurtosis (excess)   : 1.782                 3.354               
+  Max                 : 61.72                 134.99              
+
+3.2 Server Compute Time (ms) — dari HTML
+  Mean compute        : 3.88                  3.52                
+  P95 compute         : 5.00                  5.00                
+
+3.3 Infra/Network Overhead (total − compute) (ms)
+  Mean overhead       : 42.82                 92.04               
+  P95 overhead        : 50.26                 120.16              
+
+3.4 Warm-up vs Steady State
+  Warmup mean (10 req) : 49.86                 96.89               
+  Steady-state mean   : 45.91                 95.23               
+
+3.5 Validasi SSR
+  Semua timestamp unik: YA                    YA                  
+  (YA = force-dynamic aktif, tidak ada response yang di-cache)
+
+4. UJI SIGNIFIKANSI STATISTIK
+──────────────────────────────
+  Metode          : Mann-Whitney U (two-sided)
+  U-statistic     : 48.0
+  p-value         : 0.0000
+  Kesimpulan      : Signifikan (p < 0.05)
+  Effect size (r) : 0.9616  (|r|>0.1 kecil, >0.3 sedang, >0.5 besar)
+  Cohen's d       : -3.9861
+
+5. INTERPRETASI DAN DISKUSI
+──────────────────────────────
+Perbedaan mean response time antara Server-3000 dan Server-4000 adalah
+48.86 ms (104.6%), di mana Server-3000 lebih cepat.
+
+Nilai Coefficient of Variation (CV) mengindikasikan konsistensi layanan:
+  Server-3000: CV = 0.131   Server-4000: CV = 0.170
+Nilai CV lebih rendah menunjukkan respons lebih konsisten antar request.
+
+Decomposisi waktu memperlihatkan bahwa server compute time (beban CPU isolate)
+antara kedua server relatif setara (3.9 ms vs 3.5 ms).
+Perbedaan utama terletak pada komponen infra/network overhead, yang mencerminkan
+perbedaan model eksekusi (Lambda cold-start vs Isolate reuse) dan routing jaringan.
+
+Skewness positif tinggi (-0.61) mengindikasikan adanya outlier ke kanan
+(cold-start events), yang merupakan karakteristik tipikal arsitektur serverless.
+
+CATATAN: Pengujian lokal ini menggunakan dua instance Next.js pada port berbeda
+sebagai proxy untuk mensimulasikan kondisi deployment. Angka ini merupakan
+baseline validasi logika SSR, bukan prediksi performa produksi.
+Faktor yang tidak terukur di lokal: cold start sesungguhnya, latency jaringan
+global, edge node selection, TLS handshake, dan HTTP/2 multiplexing.
+
+6. KESIMPULAN
+──────────────────────────────
+Dari 50 request per server:
+- Server-3000 mencatatkan mean response time lebih rendah (104.6% lebih cepat)
+- Uji Mann-Whitney: Signifikan (p < 0.05)
+- SSR aktif dan tervalidasi pada kedua server (semua timestamp unik)
+- Server compute time setara, perbedaan ada di lapisan infrastruktur
+- Deployment produksi diperlukan untuk mengukur cold start dan latency global
+
+7. ARTEFAK
+──────────────────────────────
+  images/01_distribution.png      — Histogram + KDE distribusi response time
+  images/02_boxplot.png           — Box plot spread & outlier comparison
+  images/03_percentiles.png       — Perbandingan P50, P95, P99
+  images/04_timeseries.png        — Time series per-request (deteksi warm-up)
+  images/05_cdf.png               — Empirical CDF kedua server
+  images/06_overhead_breakdown.png — Dekomposisi compute vs infra overhead
+
+================================================================================

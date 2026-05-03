@@ -1,0 +1,5 @@
+requests>=2.33
+rich>=15.0
+matplotlib>=3.9
+numpy>=2.0
+scipy>=1.13
