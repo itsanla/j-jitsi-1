@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 
 const app = new Hono()
 
-const vercelPayload = {
+const payload = {
   deployment: 'vercel',
   platform: 'Vercel Serverless Functions',
   runtime: 'Node.js',
@@ -12,10 +12,6 @@ const vercelPayload = {
   isolation: 'process-container',
 }
 
-app.get('/', (c) => c.text('jirokit api'))
-
-app.get('/api/benchmark', (c) => {
-  return c.json({ ...vercelPayload, timestamp: new Date().toISOString() })
-})
+app.get('/', (c) => c.json({ ...payload, timestamp: new Date().toISOString() }))
 
 export default app
